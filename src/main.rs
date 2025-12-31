@@ -2,17 +2,10 @@ use env_logger::Builder;
 #[allow(unused)] // TODO: remove after development
 use log::{debug, error, info};
 use clap::Parser;
-use std::path::PathBuf;
-
 mod transaction;
+mod args;
+use crate::args::Args;
 
-#[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
-struct Args {
-    name: PathBuf,
-    #[clap(long, short = 'd')]
-    debug: bool,
-}
 fn main() {
 
    let args = Args::parse();

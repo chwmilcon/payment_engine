@@ -2,8 +2,9 @@ use csv::Reader;
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
-//use rust_decimal::Decimal;
 use rust_decimal::prelude::*;
+#[allow(unused)] // TODO: remove after development
+use log::{debug, error, info};
 
 // Define a struct to represent a transaction
 #[allow(unused)] // TODO: Remove after development
@@ -35,7 +36,7 @@ where
 {
     let file = File::open(filename)?;
     let rdr = csv::ReaderBuilder::new()
-        .has_headers(false) // TODO: add headers
+        .has_headers(true)
         .from_reader(file);
 
     process_csv_from_reader(rdr, process_func)
@@ -53,7 +54,7 @@ where
     F: FnMut(Transaction) -> Result<(), Box<dyn Error>>,
 {
     let rdr = csv::ReaderBuilder::new()
-        .has_headers(false) // TODO: Put headers on data in tests
+        .has_headers(true)
         .from_reader(buffer.as_bytes());
 
     process_csv_from_reader(rdr, process_func)
@@ -109,6 +110,13 @@ where
         let amount = rust_decimal::Decimal::from_str(amount_str)
             .map_err(|e| format!("Failed to parse amount '{}': {}", amount_str, e))?;
 
+        // Amount's should be at most 4 places
+        let rounded_amount = amount.round_dp(4);
+
+        if amount != rounded_amount {
+            return Err(format!("Amount not formatted correctly {}", amount_str).into());
+        }
+
         let transaction = Transaction {
             tx_type,
             client_id,
@@ -140,7 +148,7 @@ mod tests {
     #[test]
     fn test_process_success() -> Result<(), Box<dyn Error>> {
         let csv_content =
-            "deposit,101,1000001,123.4567\nwithdraw,202,1000002,78.90\ndeposit,101,1000003,50.00";
+            "type, client, tx, amount\ndeposit,101,1000001,123.4567\nwithdraw,202,1000002,78.90\ndeposit,101,1000003,50.00";
         let mut processed_transactions = Vec::new();
         let process_func = |tx: Transaction| -> Result<(), Box<dyn Error>> {
             processed_transactions.push(tx.clone());
@@ -189,7 +197,7 @@ mod tests {
 
     #[test]
     fn test_process_invalid_client_id() -> Result<(), Box<dyn Error>> {
-        let csv_content = "deposit,abc,1000001,100.00";
+        let csv_content = "type, client, tx, amount\ndeposit,abc,1000001,100.00";
         let result = process_csv_from_buffer(csv_content, |_| Ok(()));
         assert!(result.is_err());
         assert!(result
@@ -201,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_process_invalid_tx_id() -> Result<(), Box<dyn Error>> {
-        let csv_content = "deposit,101,xyz,100.00";
+        let csv_content = "type, client, tx, amount\ndeposit,101,xyz,100.00";
         let result = process_csv_from_buffer(csv_content, |_| Ok(()));
         assert!(result.is_err());
         assert!(result
@@ -213,7 +221,7 @@ mod tests {
 
     #[test]
     fn test_process_invalid_amount() -> Result<(), Box<dyn Error>> {
-        let csv_content = "deposit,101,1000001,not_a_number";
+        let csv_content = "type, client, tx, amount\ndeposit,101,1000001,not_a_number";
         let result = process_csv_from_buffer(csv_content, |_| Ok(()));
         assert!(result.is_err());
         assert!(result
@@ -225,19 +233,20 @@ mod tests {
 
     #[test]
     fn test_process_invalid_record_format() -> Result<(), Box<dyn Error>> {
-        let csv_content = "deposit,101,1000001"; // Missing amount field
+        let csv_content = "type, client, tx, amount\ndeposit,101,1000001"; // Missing amount field
         let result = process_csv_from_buffer(csv_content, |_| Ok(()));
         assert!(result.is_err());
+        // Note: contains() isn't very resilient, should/would improve
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Invalid record format"));
+            .contains("CSV error: record 1 (line: 2, byte: 25): found record with 3 fields, but the previous record has 4 fields"));
         Ok(())
     }
 
     #[test]
     fn test_process_file_processing_function_error() -> Result<(), Box<dyn Error>> {
-        let csv_content = "deposit,101,1000001,100.00";
+        let csv_content = "type, client, tx, amount\ndeposit,101,1000001,100.00";
         let temp_file = create_temp_csv(csv_content)?;
         let filename = temp_file
             .path()
@@ -260,7 +269,7 @@ mod tests {
     #[test]
     fn test_process_csv_from_buffer_success() -> Result<(), Box<dyn Error>> {
         // TODO: Is this redundant with another test?
-        let csv_content = "deposit,101,1000001,123.4567\nwithdraw,202,1000002,78.90";
+        let csv_content = "type, client, tx, amount\ndeposit,101,1000001,123.4567\nwithdraw,202,1000002,78.90";
 
         let mut processed_transactions = Vec::new();
         let process_func = |tx: Transaction| -> Result<(), Box<dyn Error>> {
