@@ -6,11 +6,20 @@ use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum TransactionType {
+    Deposit,
+    Withdrawl,
+    Dispute,
+    Resolve,
+    Chargeback,
+}
+
 // Define a struct to represent a transaction
 #[allow(unused)] // TODO: Remove after development
 #[derive(Debug, Clone)]
 pub struct Transaction {
-    pub tx_type: String,
+    pub tx_type: TransactionType,
     pub client_id: u16,
     pub tx_id: u32,
     pub amount: rust_decimal::Decimal,
@@ -40,6 +49,30 @@ where
         .from_reader(file);
 
     process_csv_from_reader(rdr, process_func)
+}
+
+/// Translate that we have a transaction type from string to enum TransactionType
+///
+/// # Arguments
+///
+/// * `transaction_type`: Transaction type to check.
+///
+/// # Returns
+///
+/// * Result<TransactionType, Box<dyn Error>>
+pub fn translate_trx_type(trx_type: &str) -> Result<TransactionType, Box<dyn Error>> {
+    let result = match trx_type {
+        "withdrawl" => Ok(TransactionType::Withdrawl),
+        "withdraw" => Ok(TransactionType::Withdrawl),
+        "deposit" => Ok(TransactionType::Deposit),
+        "dispute" => Ok(TransactionType::Dispute),
+        "resolve" => Ok(TransactionType::Resolve),
+        "chargeback" => Ok(TransactionType::Chargeback),
+        _ => {
+            Err(format!("Unknown Tranaction {}", trx_type).into())
+        }
+    };
+    result
 }
 
 /// Reads a CSV from a string buffer and processes each row using a provided function.
@@ -92,6 +125,7 @@ where
         }
 
         let tx_type = record.get(0).ok_or("Missing type field")?.to_string();
+        let tx_type = translate_trx_type(&tx_type)?;
         let client_id_str = record.get(1).ok_or("Missing client field")?;
         let tx_id_str = record.get(2).ok_or("Missing tx field")?;
         let amount_str = record.get(3).ok_or("Missing amount field")?;
@@ -158,7 +192,7 @@ mod tests {
         process_csv_from_buffer(csv_content, process_func)?;
 
         assert_eq!(processed_transactions.len(), 3);
-        assert_eq!(processed_transactions[0].tx_type, "deposit");
+        assert_eq!(processed_transactions[0].tx_type, TransactionType::Deposit);
         assert_eq!(processed_transactions[0].client_id, 101);
         assert_eq!(processed_transactions[0].tx_id, 1000001);
         assert_eq!(
@@ -166,7 +200,7 @@ mod tests {
             rust_decimal::Decimal::from_str("123.4567")?
         );
 
-        assert_eq!(processed_transactions[1].tx_type, "withdraw");
+        assert_eq!(processed_transactions[1].tx_type, TransactionType::Withdrawl);
         assert_eq!(processed_transactions[1].client_id, 202);
         assert_eq!(processed_transactions[1].tx_id, 1000002);
         assert_eq!(
@@ -174,7 +208,7 @@ mod tests {
             rust_decimal::Decimal::from_str("78.90")?
         );
 
-        assert_eq!(processed_transactions[2].tx_type, "deposit");
+        assert_eq!(processed_transactions[2].tx_type, TransactionType::Deposit);
         assert_eq!(processed_transactions[2].client_id, 101);
         assert_eq!(processed_transactions[2].tx_id, 1000003);
         assert_eq!(
@@ -301,7 +335,7 @@ mod tests {
         process_csv_from_buffer(csv_content, process_func)?;
 
         assert_eq!(processed_transactions.len(), 2);
-        assert_eq!(processed_transactions[0].tx_type, "deposit");
+        assert_eq!(processed_transactions[0].tx_type, TransactionType::Deposit);
         assert_eq!(processed_transactions[0].client_id, 101);
         assert_eq!(processed_transactions[0].tx_id, 1000001);
         assert_eq!(
