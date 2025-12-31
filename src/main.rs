@@ -1,9 +1,10 @@
 use env_logger::Builder;
-use log::debug;
-
-
+#[allow(unused)] // TODO: remove after development
+use log::{debug, error, info};
 use clap::Parser;
 use std::path::PathBuf;
+
+mod transaction;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -26,10 +27,12 @@ fn main() {
             .filter_level(log::LevelFilter::Info)
             .init();
     }
- 
-    debug!("Hello, world!");
- 
-    println!("Hello, world!");
 
-    println!("Filename: {}", args.name.display());
+    debug!("processing");
+
+    if let Err(e) = transaction::process_file(args.name.to_str().unwrap(), |_| Ok(())) {
+        error!("Error processing CSV: {}", e);
+        std::process::exit(1);
+    }
+    debug!("Processing complete")
 }
