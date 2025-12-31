@@ -4,4 +4,4 @@
 
 ## TODOs
 * Clean up TODOs before uploading to github
-*
+* Make command line argument to have or not have headers

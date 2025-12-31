@@ -1,12 +1,12 @@
+use csv::Reader;
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
-use csv::Reader;
 //use rust_decimal::Decimal;
 use rust_decimal::prelude::*;
 
 // Define a struct to represent a transaction
-#[allow(unused)]  // TODO: Remove after development
+#[allow(unused)] // TODO: Remove after development
 #[derive(Debug, Clone)]
 pub struct Transaction {
     pub tx_type: String,
@@ -34,7 +34,10 @@ where
     F: FnMut(Transaction) -> Result<(), Box<dyn Error>>,
 {
     let file = File::open(filename)?;
-    let rdr = Reader::from_reader(file);
+    let rdr = csv::ReaderBuilder::new()
+        .has_headers(false) // TODO: add headers
+        .from_reader(file);
+
     process_csv_from_reader(rdr, process_func)
 }
 
@@ -44,12 +47,15 @@ where
 ///
 /// * `buffer`: The string buffer containing CSV data.
 /// * `process_func`: A closure that takes a `Transaction` and returns a `Result<(), Box<dyn Error>>`.
-#[allow(unused)]     // TODO: Remove after development
+#[allow(unused)] // TODO: Remove after development
 pub fn process_csv_from_buffer<F>(buffer: &str, process_func: F) -> Result<(), Box<dyn Error>>
 where
     F: FnMut(Transaction) -> Result<(), Box<dyn Error>>,
 {
-    let rdr = Reader::from_reader(buffer.as_bytes());
+    let rdr = csv::ReaderBuilder::new()
+        .has_headers(false) // TODO: Put headers on data in tests
+        .from_reader(buffer.as_bytes());
+
     process_csv_from_reader(rdr, process_func)
 }
 
@@ -65,7 +71,10 @@ where
 /// * `Result<(), Box<dyn Error>>`: Ok(()) if all transactions were processed successfully,
 ///   otherwise an error indicating the first encountered issue.
 ///
-pub fn process_csv_from_reader<R: Read, F>(mut rdr: Reader<R>, mut process_func: F) -> Result<(), Box<dyn Error>>
+pub fn process_csv_from_reader<R: Read, F>(
+    mut rdr: Reader<R>,
+    mut process_func: F,
+) -> Result<(), Box<dyn Error>>
 where
     F: FnMut(Transaction) -> Result<(), Box<dyn Error>>,
 {
@@ -74,7 +83,11 @@ where
 
         // Ensure the record has the expected number of fields
         if record.len() != 4 {
-            return Err(format!("Invalid record format: expected 4 fields, got {}", record.len()).into());
+            return Err(format!(
+                "Invalid record format: expected 4 fields, got {}",
+                record.len()
+            )
+            .into());
         }
 
         let tx_type = record.get(0).ok_or("Missing type field")?.to_string();
@@ -83,19 +96,18 @@ where
         let amount_str = record.get(3).ok_or("Missing amount field")?;
 
         // Parse client_id
-        let client_id = client_id_str.parse::<u16>().map_err(|e| {
-            format!("Failed to parse client ID '{}': {}", client_id_str, e)
-        })?;
+        let client_id = client_id_str
+            .parse::<u16>()
+            .map_err(|e| format!("Failed to parse client ID '{}': {}", client_id_str, e))?;
 
         // Parse tx_id
-        let tx_id = tx_id_str.parse::<u32>().map_err(|e| {
-            format!("Failed to parse transaction ID '{}': {}", tx_id_str, e)
-        })?;
+        let tx_id = tx_id_str
+            .parse::<u32>()
+            .map_err(|e| format!("Failed to parse transaction ID '{}': {}", tx_id_str, e))?;
 
         // Parse amount using rust_decimal for precise decimal handling
-        let amount = rust_decimal::Decimal::from_str(amount_str).map_err(|e| {
-            format!("Failed to parse amount '{}': {}", amount_str, e)
-        })?;
+        let amount = rust_decimal::Decimal::from_str(amount_str)
+            .map_err(|e| format!("Failed to parse amount '{}': {}", amount_str, e))?;
 
         let transaction = Transaction {
             tx_type,
@@ -127,7 +139,8 @@ mod tests {
 
     #[test]
     fn test_process_success() -> Result<(), Box<dyn Error>> {
-        let csv_content = "deposit,101,1000001,123.4567\nwithdraw,202,1000002,78.90\ndeposit,101,1000003,50.00";
+        let csv_content =
+            "deposit,101,1000001,123.4567\nwithdraw,202,1000002,78.90\ndeposit,101,1000003,50.00";
         let mut processed_transactions = Vec::new();
         let process_func = |tx: Transaction| -> Result<(), Box<dyn Error>> {
             processed_transactions.push(tx.clone());
@@ -140,17 +153,26 @@ mod tests {
         assert_eq!(processed_transactions[0].tx_type, "deposit");
         assert_eq!(processed_transactions[0].client_id, 101);
         assert_eq!(processed_transactions[0].tx_id, 1000001);
-        assert_eq!(processed_transactions[0].amount, rust_decimal::Decimal::from_str("123.4567")?);
+        assert_eq!(
+            processed_transactions[0].amount,
+            rust_decimal::Decimal::from_str("123.4567")?
+        );
 
         assert_eq!(processed_transactions[1].tx_type, "withdraw");
         assert_eq!(processed_transactions[1].client_id, 202);
         assert_eq!(processed_transactions[1].tx_id, 1000002);
-        assert_eq!(processed_transactions[1].amount, rust_decimal::Decimal::from_str("78.90")?);
+        assert_eq!(
+            processed_transactions[1].amount,
+            rust_decimal::Decimal::from_str("78.90")?
+        );
 
         assert_eq!(processed_transactions[2].tx_type, "deposit");
         assert_eq!(processed_transactions[2].client_id, 101);
         assert_eq!(processed_transactions[2].tx_id, 1000003);
-        assert_eq!(processed_transactions[2].amount, rust_decimal::Decimal::from_str("50.00")?);
+        assert_eq!(
+            processed_transactions[2].amount,
+            rust_decimal::Decimal::from_str("50.00")?
+        );
 
         Ok(())
     }
@@ -159,7 +181,10 @@ mod tests {
     fn test_process_file_file_not_found() {
         let result = process_file("non_existent_file.csv", |_| Ok(()));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No such file or directory"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No such file or directory"));
     }
 
     #[test]
@@ -167,7 +192,10 @@ mod tests {
         let csv_content = "deposit,abc,1000001,100.00";
         let result = process_csv_from_buffer(csv_content, |_| Ok(()));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Failed to parse client ID 'abc'"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to parse client ID 'abc'"));
         Ok(())
     }
 
@@ -176,7 +204,10 @@ mod tests {
         let csv_content = "deposit,101,xyz,100.00";
         let result = process_csv_from_buffer(csv_content, |_| Ok(()));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Failed to parse transaction ID 'xyz'"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to parse transaction ID 'xyz'"));
         Ok(())
     }
 
@@ -185,7 +216,10 @@ mod tests {
         let csv_content = "deposit,101,1000001,not_a_number";
         let result = process_csv_from_buffer(csv_content, |_| Ok(()));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Failed to parse amount 'not_a_number'"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to parse amount 'not_a_number'"));
         Ok(())
     }
 
@@ -194,7 +228,10 @@ mod tests {
         let csv_content = "deposit,101,1000001"; // Missing amount field
         let result = process_csv_from_buffer(csv_content, |_| Ok(()));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid record format"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid record format"));
         Ok(())
     }
 
@@ -202,7 +239,10 @@ mod tests {
     fn test_process_file_processing_function_error() -> Result<(), Box<dyn Error>> {
         let csv_content = "deposit,101,1000001,100.00";
         let temp_file = create_temp_csv(csv_content)?;
-        let filename = temp_file.path().to_str().ok_or("Failed to get temp file path")?;
+        let filename = temp_file
+            .path()
+            .to_str()
+            .ok_or("Failed to get temp file path")?;
 
         let mut call_count = 0;
         let process_func = |_tx: Transaction| -> Result<(), Box<dyn Error>> {
@@ -234,8 +274,14 @@ mod tests {
         assert_eq!(processed_transactions[0].tx_type, "deposit");
         assert_eq!(processed_transactions[0].client_id, 101);
         assert_eq!(processed_transactions[0].tx_id, 1000001);
-        assert_eq!(processed_transactions[0].amount, rust_decimal::Decimal::from_str("123.4567")?);
-        assert_eq!(processed_transactions[1].amount, rust_decimal::Decimal::from_str("78.90")?);
+        assert_eq!(
+            processed_transactions[0].amount,
+            rust_decimal::Decimal::from_str("123.4567")?
+        );
+        assert_eq!(
+            processed_transactions[1].amount,
+            rust_decimal::Decimal::from_str("78.90")?
+        );
 
         Ok(())
     }
