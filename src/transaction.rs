@@ -1,10 +1,10 @@
 use csv::Reader;
+#[allow(unused)] // TODO: remove after development
+use log::{debug, error, info};
+use rust_decimal::prelude::*;
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
-use rust_decimal::prelude::*;
-#[allow(unused)] // TODO: remove after development
-use log::{debug, error, info};
 
 // Define a struct to represent a transaction
 #[allow(unused)] // TODO: Remove after development
@@ -208,6 +208,26 @@ mod tests {
     }
 
     #[test]
+    fn test_amount_precesion() -> Result<(), Box<dyn Error>> {
+        // Note: Not testing valid number of digits specifically as that is tested in other test cases
+        let csv_content = "type, client, tx, amount\ndeposit,101,1000001,123.45678";
+        let result = process_csv_from_buffer(csv_content, |_| Ok(()));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Amount not formatted correctly 123.45678"));
+
+        let csv_content = "type, client, tx, amount\ndeposit,101,1000001,123.0";
+        process_csv_from_buffer(csv_content, |_| Ok(()))?;
+
+        let csv_content = "type, client, tx, amount\ndeposit,101,1000001,123";
+        process_csv_from_buffer(csv_content, |_| Ok(()))?;
+
+        Ok(())
+    }
+
+    #[test]
     fn test_process_invalid_tx_id() -> Result<(), Box<dyn Error>> {
         let csv_content = "type, client, tx, amount\ndeposit,101,xyz,100.00";
         let result = process_csv_from_buffer(csv_content, |_| Ok(()));
@@ -269,7 +289,8 @@ mod tests {
     #[test]
     fn test_process_csv_from_buffer_success() -> Result<(), Box<dyn Error>> {
         // TODO: Is this redundant with another test?
-        let csv_content = "type, client, tx, amount\ndeposit,101,1000001,123.4567\nwithdraw,202,1000002,78.90";
+        let csv_content =
+            "type, client, tx, amount\ndeposit,101,1000001,123.4567\nwithdraw,202,1000002,78.90";
 
         let mut processed_transactions = Vec::new();
         let process_func = |tx: Transaction| -> Result<(), Box<dyn Error>> {
