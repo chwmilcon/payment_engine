@@ -3,11 +3,13 @@
 use csv::{Reader, Trim};
 use log::{debug, error, info};
 use rust_decimal::prelude::*;
+use serde::Serialize;
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
+use std::sync::atomic::{AtomicU32, Ordering};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum TransactionType {
     Deposit,
     Withdrawl,
@@ -15,14 +17,38 @@ pub enum TransactionType {
     Resolve,
     Chargeback,
 }
+//
+// Note: for this sample this is not necessary as we aren't threaded, but
+//       in a production payment processor where transactions would be read
+//       on multiple threads it would be.
+static CURRENT_SEQ: AtomicU32 = AtomicU32::new(0);
 
 // Define a struct to represent a transaction
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Transaction {
+    pub seq_num: u32, // seq_num differs from tx_id in that it's when we received it
     pub tx_type: TransactionType,
     pub client_id: u16,
-    pub tx_id: u32,
+    pub tx_id: u32, // Transaction id as established by something outside of this
     pub amount: rust_decimal::Decimal,
+}
+
+impl Transaction {
+    /// Output a single transaction
+    ///
+    /// Write a single transaction as a json blob to an open file. This is
+    /// primarily for debugging.
+    ///
+    /// # Arguments
+    ///
+    /// * `self`: Self
+    /// * `file`: file to to write json blog to. Should be open and ready to write
+    ///
+    /// # Returns: Ok, Error
+    pub fn output(&self, file: &mut File) -> Result<(), Box<dyn Error>> {
+        serde_json::to_writer_pretty(file, self)?;
+        Ok(())
+    }
 }
 
 /// Reads a CSV file from the given filename and processes each row using a provided function.
@@ -69,9 +95,7 @@ pub fn translate_trx_type(trx_type: &str) -> Result<TransactionType, Box<dyn Err
         "dispute" => Ok(TransactionType::Dispute),
         "resolve" => Ok(TransactionType::Resolve),
         "chargeback" => Ok(TransactionType::Chargeback),
-        _ => {
-            Err(format!("Unknown Tranaction {}", trx_type).into())
-        }
+        _ => Err(format!("Unknown Tranaction {}", trx_type).into()),
     };
     result
 }
@@ -151,7 +175,11 @@ where
             return Err(format!("Amount not formatted correctly {}", amount_str).into());
         }
 
+        // Note: atomic here is a bit of an overkill in this example, but
+        // would be needed in production/multithreaded version.
+        let seq_num = CURRENT_SEQ.fetch_add(1, Ordering::Relaxed);
         let transaction = Transaction {
+            seq_num,
             tx_type,
             client_id,
             tx_id,
@@ -164,7 +192,6 @@ where
 
     Ok(())
 }
-
 
 //////////////////////////////////////////////////////////////////////
 // Unit Tests
@@ -204,7 +231,10 @@ mod tests {
             rust_decimal::Decimal::from_str("123.4567")?
         );
 
-        assert_eq!(processed_transactions[1].tx_type, TransactionType::Withdrawl);
+        assert_eq!(
+            processed_transactions[1].tx_type,
+            TransactionType::Withdrawl
+        );
         assert_eq!(processed_transactions[1].client_id, 202);
         assert_eq!(processed_transactions[1].tx_id, 1000002);
         assert_eq!(
@@ -350,6 +380,37 @@ mod tests {
             processed_transactions[1].amount,
             rust_decimal::Decimal::from_str("78.90")?
         );
+
+        Ok(())
+    }
+
+    #[test]
+    // TODO: Remove, just for debugging
+    fn foo_dump_transaction() -> Result<(), Box<dyn Error>> {
+        let transaction = Transaction {
+            seq_num: 1,
+            tx_type: TransactionType::Deposit,
+            client_id: 1,
+            tx_id: 1,
+            amount: rust_decimal::Decimal::from_str("100.00")?,
+        };
+
+        //let mut temp_file = NamedTempFile::new()?;
+        let mut temp_file =             File::create("output.json")?;
+
+        transaction.output(&mut temp_file)?;
+
+//         let mut buffer = String::new();
+//         temp_file.as_file_mut().read_to_string(&mut buffer)?;
+
+//         let expected_output = r#"{
+//   "seq_num": 1,
+//   "tx_type": "Deposit",
+//   "client_id": 1,
+//   "tx_id": 1,
+//   "amount": 100.00
+// }"#;
+//         assert_eq!(buffer.trim(), expected_output.trim());
 
         Ok(())
     }

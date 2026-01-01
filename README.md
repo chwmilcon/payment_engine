@@ -20,6 +20,9 @@
   transactions for each transaction type.
 
 ## TODOs
-* Clean up TODOs before uploading to github
-* Make transaction history
-* Make account struct
+- [ ] Clean up TODOs before uploading to github
+- [ ] Make transaction history
+- [ ] Make account struct
+- [ ] Allow transaction processing after failed line
+- [ ] Create basic processing loop
+- [ ] Dump the accounts as CSV.
