@@ -12,6 +12,9 @@
   be parsed and the processor engine given that. In this toy we are reading
   the ascii data and doing some basic validation on it.
 
+* Treating "withdraw" and "withdrawl" as same enum.
+
 ## TODOs
 * Clean up TODOs before uploading to github
 * Make command line argument to have or not have headers
+I don't know we were looking* Break up Transactions into subclasses
