@@ -14,7 +14,12 @@
 
 * Treating "withdraw" and "withdrawl" as same enum.
 
+* Transactions in a real application might be broken up into derived structures
+  containing different information based on transaction type and/or if we
+  were processing grpc messages. In this simple example not going to derive
+  transactions for each transaction type.
+
 ## TODOs
 * Clean up TODOs before uploading to github
-* Make command line argument to have or not have headers
-I don't know we were looking* Break up Transactions into subclasses
+* Make transaction history
+* Make account struct

@@ -1,5 +1,6 @@
-use csv::Reader;
-#[allow(unused)] // TODO: remove after development
+#![allow(unused)] // TODO: remove after development
+
+use csv::{Reader, Trim};
 use log::{debug, error, info};
 use rust_decimal::prelude::*;
 use std::error::Error;
@@ -16,7 +17,6 @@ pub enum TransactionType {
 }
 
 // Define a struct to represent a transaction
-#[allow(unused)] // TODO: Remove after development
 #[derive(Debug, Clone)]
 pub struct Transaction {
     pub tx_type: TransactionType,
@@ -46,6 +46,7 @@ where
     let file = File::open(filename)?;
     let rdr = csv::ReaderBuilder::new()
         .has_headers(true)
+        .trim(Trim::All)
         .from_reader(file);
 
     process_csv_from_reader(rdr, process_func)
@@ -81,7 +82,6 @@ pub fn translate_trx_type(trx_type: &str) -> Result<TransactionType, Box<dyn Err
 ///
 /// * `buffer`: The string buffer containing CSV data.
 /// * `process_func`: A closure that takes a `Transaction` and returns a `Result<(), Box<dyn Error>>`.
-#[allow(unused)] // TODO: Remove after development
 pub fn process_csv_from_buffer<F>(buffer: &str, process_func: F) -> Result<(), Box<dyn Error>>
 where
     F: FnMut(Transaction) -> Result<(), Box<dyn Error>>,
@@ -165,6 +165,10 @@ where
     Ok(())
 }
 
+
+//////////////////////////////////////////////////////////////////////
+// Unit Tests
+//////////////////////////////////////////////////////////////////////
 #[cfg(test)]
 mod tests {
     use super::*;
