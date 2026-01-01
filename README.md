@@ -19,10 +19,14 @@
   were processing grpc messages. In this simple example not going to derive
   transactions for each transaction type.
 
+* Assuming that code should continue with a single bad row, but will add
+  command line flag to override this behavior.
+
 ## TODOs
 - [ ] Clean up TODOs before uploading to github
 - [ ] Make transaction history
 - [ ] Make account struct
-- [ ] Allow transaction processing after failed line
+- [X] Allow transaction processing after failed line
 - [ ] Create basic processing loop
 - [ ] Dump the accounts as CSV.
+- [ ] Test cases for keep_going = true

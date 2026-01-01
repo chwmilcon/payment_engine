@@ -60,12 +60,17 @@ impl Transaction {
 ///
 /// * `filename`: The path to the CSV file.
 /// * `process_func`: A closure that takes a `Transaction` and returns a `Result<(), Box<dyn Error>>`.
+/// * `keep_going` : Keep going if you have an erroneous line true/false
 ///
 /// # Returns
 ///
 /// * `Result<(), Box<dyn Error>>`: Ok(()) if all transactions were processed successfully,
 ///   otherwise an error indicating the first encountered issue.
-pub fn process_file<F>(filename: &str, process_func: F) -> Result<(), Box<dyn Error>>
+pub fn process_file<F>(
+    filename: &str,
+    process_func: F,
+    keep_going: bool,
+) -> Result<(), Box<dyn Error>>
 where
     F: FnMut(Transaction) -> Result<(), Box<dyn Error>>,
 {
@@ -75,7 +80,7 @@ where
         .trim(Trim::All)
         .from_reader(file);
 
-    process_csv_from_reader(rdr, process_func)
+    process_csv_from_reader(rdr, process_func, keep_going)
 }
 
 /// Translate that we have a transaction type from string to enum TransactionType
@@ -106,7 +111,16 @@ pub fn translate_trx_type(trx_type: &str) -> Result<TransactionType, Box<dyn Err
 ///
 /// * `buffer`: The string buffer containing CSV data.
 /// * `process_func`: A closure that takes a `Transaction` and returns a `Result<(), Box<dyn Error>>`.
-pub fn process_csv_from_buffer<F>(buffer: &str, process_func: F) -> Result<(), Box<dyn Error>>
+/// * `keep_going` : Keep going if you have an erroneous line true/false
+///
+/// # Returns
+///
+/// * Result<TransactionType, Box<dyn Error>>
+pub fn process_csv_from_buffer<F>(
+    buffer: &str,
+    process_func: F,
+    keep_going: bool,
+) -> Result<(), Box<dyn Error>>
 where
     F: FnMut(Transaction) -> Result<(), Box<dyn Error>>,
 {
@@ -114,7 +128,7 @@ where
         .has_headers(true)
         .from_reader(buffer.as_bytes());
 
-    process_csv_from_reader(rdr, process_func)
+    process_csv_from_reader(rdr, process_func, keep_going)
 }
 
 /// Reads a CSV file and processes each row using a provided function.
@@ -123,6 +137,7 @@ where
 ///
 /// * `rdr`: A `csv::Reader` instance from which to read records.
 /// * `process_func`: A closure that takes a `Transaction` and returns a `Result<(), Box<dyn Error>>`.
+/// * `keep_going` : Keep going if we have an erroneous line. true/false
 ///
 /// # Returns
 ///
@@ -132,67 +147,92 @@ where
 pub fn process_csv_from_reader<R: Read, F>(
     mut rdr: Reader<R>,
     mut process_func: F,
+    keep_going: bool,
 ) -> Result<(), Box<dyn Error>>
 where
     F: FnMut(Transaction) -> Result<(), Box<dyn Error>>,
 {
+    let mut cnt: u32 = 0;
     for result in rdr.records() {
-        let record = result?;
-
-        // Ensure the record has the expected number of fields
-        if record.len() != 4 {
-            return Err(format!(
-                "Invalid record format: expected 4 fields, got {}",
-                record.len()
-            )
-            .into());
-        }
-
-        let tx_type = record.get(0).ok_or("Missing type field")?.to_string();
-        let tx_type = translate_trx_type(&tx_type)?;
-        let client_id_str = record.get(1).ok_or("Missing client field")?;
-        let tx_id_str = record.get(2).ok_or("Missing tx field")?;
-        let amount_str = record.get(3).ok_or("Missing amount field")?;
-
-        // Parse client_id
-        let client_id = client_id_str
-            .parse::<u16>()
-            .map_err(|e| format!("Failed to parse client ID '{}': {}", client_id_str, e))?;
-
-        // Parse tx_id
-        let tx_id = tx_id_str
-            .parse::<u32>()
-            .map_err(|e| format!("Failed to parse transaction ID '{}': {}", tx_id_str, e))?;
-
-        // Parse amount using rust_decimal for precise decimal handling
-        let amount = rust_decimal::Decimal::from_str(amount_str)
-            .map_err(|e| format!("Failed to parse amount '{}': {}", amount_str, e))?;
-
-        // Amount's should be at most 4 places
-        let rounded_amount = amount.round_dp(4);
-
-        if amount != rounded_amount {
-            return Err(format!("Amount not formatted correctly {}", amount_str).into());
-        }
-
-        // Note: atomic here is a bit of an overkill in this example, but
-        // would be needed in production/multithreaded version.
-        let seq_num = CURRENT_SEQ.fetch_add(1, Ordering::Relaxed);
-        let transaction = Transaction {
-            seq_num,
-            tx_type,
-            client_id,
-            tx_id,
-            amount,
+        cnt + 1;
+        let row_result = match result {
+            Ok(result) => {
+                let row_result = process_row(result, cnt);
+                let result = match row_result {
+                    Ok(row) => process_func(row),
+                    Err(e) => Err(e),
+                };
+                result
+            }
+            Err(ref err) => Err(err.into()),
         };
-
-        // Call the provided processing function
-        process_func(transaction)?;
+        if let Err(err) = row_result {
+            if keep_going {
+                error!("Error: {}", err);
+                continue;
+            } else {
+                return Err(format!("process_func: {}", err).into());
+            }
+        }
     }
 
     Ok(())
 }
 
+//
+// process_row - process a single row. Broken out from the above function so that
+//               there is finer grain control over continue/stop functionality.
+//
+fn process_row(record: csv::StringRecord, cnt: u32) -> Result<Transaction, Box<dyn Error>> {
+    // Ensure the record has the expected number of fields
+    if record.len() != 4 {
+        return Err(format!(
+            "Invalid record format: expected 4 fields, got {}. Line: {}",
+            record.len(),
+            cnt
+        )
+        .into());
+    }
+
+    let tx_type = record.get(0).ok_or("Missing type field")?.to_string();
+    let tx_type = translate_trx_type(&tx_type)?;
+    let client_id_str = record.get(1).ok_or("Missing client field")?;
+    let tx_id_str = record.get(2).ok_or("Missing tx field")?;
+    let amount_str = record.get(3).ok_or("Missing amount field")?;
+
+    // Parse client_id
+    let client_id = client_id_str
+        .parse::<u16>()
+        .map_err(|e| format!("Failed to parse client ID '{}': {}", client_id_str, e))?;
+
+    // Parse tx_id
+    let tx_id = tx_id_str
+        .parse::<u32>()
+        .map_err(|e| format!("Failed to parse transaction ID '{}': {}", tx_id_str, e))?;
+
+    // Parse amount using rust_decimal for precise decimal handling
+    let amount = rust_decimal::Decimal::from_str(amount_str)
+        .map_err(|e| format!("Failed to parse amount '{}': {}", amount_str, e))?;
+
+    // Amount's should be at most 4 places
+    let rounded_amount = amount.round_dp(4);
+
+    if amount != rounded_amount {
+        return Err(format!("Amount not formatted correctly {}", amount_str).into());
+    }
+
+    // Note: atomic here is a bit of an overkill in this example, but
+    // would be needed in production/multithreaded version.
+    let seq_num = CURRENT_SEQ.fetch_add(1, Ordering::Relaxed);
+    let transaction = Transaction {
+        seq_num,
+        tx_type,
+        client_id,
+        tx_id,
+        amount,
+    };
+    Ok(transaction)
+}
 //////////////////////////////////////////////////////////////////////
 // Unit Tests
 //////////////////////////////////////////////////////////////////////
@@ -220,7 +260,7 @@ mod tests {
             Ok(())
         };
 
-        process_csv_from_buffer(csv_content, process_func)?;
+        process_csv_from_buffer(csv_content, process_func, false)?;
 
         assert_eq!(processed_transactions.len(), 3);
         assert_eq!(processed_transactions[0].tx_type, TransactionType::Deposit);
@@ -255,7 +295,7 @@ mod tests {
 
     #[test]
     fn test_process_file_file_not_found() {
-        let result = process_file("non_existent_file.csv", |_| Ok(()));
+        let result = process_file("non_existent_file.csv", |_| Ok(()), false);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -266,7 +306,7 @@ mod tests {
     #[test]
     fn test_process_invalid_client_id() -> Result<(), Box<dyn Error>> {
         let csv_content = "type, client, tx, amount\ndeposit,abc,1000001,100.00";
-        let result = process_csv_from_buffer(csv_content, |_| Ok(()));
+        let result = process_csv_from_buffer(csv_content, |_| Ok(()), false);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -279,7 +319,7 @@ mod tests {
     fn test_amount_precesion() -> Result<(), Box<dyn Error>> {
         // Note: Not testing valid number of digits specifically as that is tested in other test cases
         let csv_content = "type, client, tx, amount\ndeposit,101,1000001,123.45678";
-        let result = process_csv_from_buffer(csv_content, |_| Ok(()));
+        let result = process_csv_from_buffer(csv_content, |_| Ok(()), false);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -287,10 +327,10 @@ mod tests {
             .contains("Amount not formatted correctly 123.45678"));
 
         let csv_content = "type, client, tx, amount\ndeposit,101,1000001,123.0";
-        process_csv_from_buffer(csv_content, |_| Ok(()))?;
+        process_csv_from_buffer(csv_content, |_| Ok(()), false)?;
 
         let csv_content = "type, client, tx, amount\ndeposit,101,1000001,123";
-        process_csv_from_buffer(csv_content, |_| Ok(()))?;
+        process_csv_from_buffer(csv_content, |_| Ok(()), false)?;
 
         Ok(())
     }
@@ -298,7 +338,7 @@ mod tests {
     #[test]
     fn test_process_invalid_tx_id() -> Result<(), Box<dyn Error>> {
         let csv_content = "type, client, tx, amount\ndeposit,101,xyz,100.00";
-        let result = process_csv_from_buffer(csv_content, |_| Ok(()));
+        let result = process_csv_from_buffer(csv_content, |_| Ok(()), false);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -310,7 +350,7 @@ mod tests {
     #[test]
     fn test_process_invalid_amount() -> Result<(), Box<dyn Error>> {
         let csv_content = "type, client, tx, amount\ndeposit,101,1000001,not_a_number";
-        let result = process_csv_from_buffer(csv_content, |_| Ok(()));
+        let result = process_csv_from_buffer(csv_content, |_| Ok(()), false);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -322,7 +362,7 @@ mod tests {
     #[test]
     fn test_process_invalid_record_format() -> Result<(), Box<dyn Error>> {
         let csv_content = "type, client, tx, amount\ndeposit,101,1000001"; // Missing amount field
-        let result = process_csv_from_buffer(csv_content, |_| Ok(()));
+        let result = process_csv_from_buffer(csv_content, |_| Ok(()), false);
         assert!(result.is_err());
         // Note: contains() isn't very resilient, should/would improve
         assert!(result
@@ -347,9 +387,10 @@ mod tests {
             Err("Error during processing".into())
         };
 
-        let result = process_file(filename, process_func);
+        let result = process_file(filename, process_func, false);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "Error during processing");
+        let str = result.unwrap_err().to_string();
+        assert_eq!(str, "process_func: Error during processing");
         assert_eq!(call_count, 1); // Should only call the function once before erroring
         Ok(())
     }
@@ -366,7 +407,7 @@ mod tests {
             Ok(())
         };
 
-        process_csv_from_buffer(csv_content, process_func)?;
+        process_csv_from_buffer(csv_content, process_func, false)?;
 
         assert_eq!(processed_transactions.len(), 2);
         assert_eq!(processed_transactions[0].tx_type, TransactionType::Deposit);
@@ -396,21 +437,21 @@ mod tests {
         };
 
         //let mut temp_file = NamedTempFile::new()?;
-        let mut temp_file =             File::create("output.json")?;
+        let mut temp_file = File::create("output.json")?;
 
         transaction.output(&mut temp_file)?;
 
-//         let mut buffer = String::new();
-//         temp_file.as_file_mut().read_to_string(&mut buffer)?;
+        //         let mut buffer = String::new();
+        //         temp_file.as_file_mut().read_to_string(&mut buffer)?;
 
-//         let expected_output = r#"{
-//   "seq_num": 1,
-//   "tx_type": "Deposit",
-//   "client_id": 1,
-//   "tx_id": 1,
-//   "amount": 100.00
-// }"#;
-//         assert_eq!(buffer.trim(), expected_output.trim());
+        //         let expected_output = r#"{
+        //   "seq_num": 1,
+        //   "tx_type": "Deposit",
+        //   "client_id": 1,
+        //   "tx_id": 1,
+        //   "amount": 100.00
+        // }"#;
+        //         assert_eq!(buffer.trim(), expected_output.trim());
 
         Ok(())
     }

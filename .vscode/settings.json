@@ -1,5 +1,6 @@
 {
     "notebook.codeActionsOnSave": {
-        "source.organizeLinkDefinitions": true
-    }
+        "source.organizeLinkDefinitions": true,
+    },
+    "debug.terminal.clearBeforeReusing": true,
 }

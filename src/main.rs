@@ -23,9 +23,10 @@ fn main() {
             .init();
     }
 
+
     debug!("processing");
 
-    if let Err(e) = transaction::process_file(args.name.to_str().unwrap(), |_| Ok(())) {
+    if let Err(e) = transaction::process_file(args.name.to_str().unwrap(), |_| Ok(()), args.stop_on_error) {
         error!("Error processing CSV: {}", e);
         std::process::exit(1);
     }
