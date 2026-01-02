@@ -1,11 +1,4 @@
-#![allow(unused)]
-use std::{
-    collections::{
-        hash_map::Entry::{Occupied, Vacant},
-        HashMap,
-    },
-    io,
-};
+use std::collections::HashMap;
 
 use crate::account::{AccountStatus, AccountStatusTotal};
 use crate::transaction::{Transaction, TransactionType};
@@ -14,7 +7,6 @@ use log::info;
 use serde::Serialize;
 use std::error::Error;
 use std::fs::File;
-use std::str::FromStr;
 
 #[derive(Debug, Serialize)]
 pub struct Ledger {
@@ -73,7 +65,7 @@ impl Ledger {
     /// # Returns
     ///
     pub fn dump_ledger(&self, filename: &str) -> Result<(), Box<dyn Error>> {
-        let mut temp_file = File::create(filename)?;
+        let temp_file = File::create(filename)?;
         serde_json::to_writer_pretty(temp_file, self)?;
         Ok(())
     }
@@ -97,7 +89,7 @@ impl Ledger {
             let row = AccountStatusTotal::new(row);
             wtr.serialize(row)?;
         }
-        wtr.flush();
+        wtr.flush()?;
         Ok(())
     }
     ///
@@ -172,7 +164,7 @@ impl Ledger {
                     )
                                .into());
                 } else {
-                    if ( old_transaction.tx_type != TransactionType::Dispute ) {
+                    if old_transaction.tx_type != TransactionType::Dispute {
                         return Err(format!(
                             "Old amount in transaction: {} isn't in dispute", transaction.tx_id).into());
                     }

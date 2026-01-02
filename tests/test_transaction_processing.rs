@@ -1,17 +1,15 @@
-#![allow(unused)]
 //
 // Transaction processing and the impact on the Ledger
 //
 
 // # Tests:
 use payment_engine::{
-    account::{AccountStatus, AccountStatusTotal},
+    account::AccountStatusTotal,
     ledger::Ledger,
     transaction::{Transaction, TransactionType},
 };
 use rust_decimal::Decimal;
 use std::error::Error;
-use std::sync::atomic::{AtomicU32, Ordering};
 
 // Helper function to create a transaction
 fn create_transaction(
@@ -27,42 +25,6 @@ fn create_transaction(
         tx_id,
         amount: Decimal::from_str_exact(amount).unwrap(),
     }
-}
-
-static CURRENT_TXID: AtomicU32 = AtomicU32::new(0);
-
-fn create_deposit(ledger: &mut Ledger,client_id:u16, amount:&str) -> u32 {
-    let tx_id = CURRENT_TXID.fetch_add(1, Ordering::Relaxed);
-    let trans = create_transaction(TransactionType::Deposit,
-                                   client_id, tx_id, amount);
-    ledger.process_transaction(&trans);
-    trans.tx_id
-}
-
-fn create_withdrawl(ledger: &mut Ledger,client_id:u16, amount:&str) -> u32 {
-    let tx_id = CURRENT_TXID.fetch_add(1, Ordering::Relaxed);
-    let trans = create_transaction(TransactionType::Withdrawl,
-                                   client_id, tx_id, amount);
-    ledger.process_transaction(&trans);
-    trans.tx_id
-}
-
-fn create_dispute(ledger: &mut Ledger,tx_id:u32, client_id:u16, amount:&str) {
-    let trans = create_transaction(TransactionType::Dispute,
-                                   client_id, tx_id, amount);
-    ledger.process_transaction(&trans);
-}
-
-fn create_resolve(ledger: &mut Ledger,tx_id:u32, client_id:u16, amount:&str) {
-    let trans = create_transaction(TransactionType::Resolve,
-                                   client_id, tx_id, amount);
-    ledger.process_transaction(&trans);
-}
-
-fn create_chargeback(ledger: &mut Ledger,tx_id:u32, client_id:u16, amount:&str) {
-    let trans = create_transaction(TransactionType::Chargeback,
-                                   client_id, tx_id, amount);
-    ledger.process_transaction(&trans);
 }
 
 #[test]
@@ -206,7 +168,7 @@ fn test_one_deposit_one_withdrawl_one_dispute_one_client() -> Result<(), Box<dyn
     ledger.process_transaction(&tx3)?;
 
     // the transaction in the by_transaction_id should be a Dispute
-    // after processing the transaction. 
+    // after processing the transaction.
     let old_transaction = ledger.by_transaction_id.get(&tx3.tx_id).unwrap();
     assert_eq!(old_transaction.tx_type, TransactionType::Dispute);
 
@@ -383,7 +345,7 @@ fn test_deposit_deposit_chargeback_one_client() -> Result<(), Box<dyn Error>> {
     // Check state after dispute
     let client1_status = ledger.by_client_id.get(&1).unwrap();
     assert_eq!(client1_status.available, Decimal::from_str_exact("400.00")?);
-    assert_eq!(client1_status.held, Decimal::ZERO);
+    assert_eq!(client1_status.held, Decimal::from_str_exact("400.00")?);
     assert_eq!(
         AccountStatusTotal::new(client1_status).total,
         Decimal::from_str_exact("800.00")?

@@ -1,13 +1,10 @@
-#[allow(unused)] // TODO: remove after development
-use log::{debug, error, info};
 use clap::Parser;
 use std::path::PathBuf;
-
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct Args {
-    #[arg(help = "File to process")]    
+    #[arg(help = "File to process")]
     pub name: PathBuf,
     #[arg(help = "Turn on debug logging")]
     #[clap(long, short = 'd')]

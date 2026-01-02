@@ -23,6 +23,5 @@
   command line flag to override this behavior.
 
 ## TODOs
-- [ ] Clean up TODOs before uploading to github
 - [ ] Make transaction history
 - [ ] Test cases for keep_going = true

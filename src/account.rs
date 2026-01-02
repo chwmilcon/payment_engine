@@ -1,10 +1,8 @@
-#![allow(dead_code)] // TODO: Remove after development
-#![allow(unused)]
 use rust_decimal::Decimal;
 use serde::Serialize;
 
 //
-// AccountStatus - everything but the total, we'll calcuate that
+// AccountStatus - everything but the total, we'll calculate that
 // during serialization for output.
 //
 #[derive(Debug, Serialize)]

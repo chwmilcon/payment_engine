@@ -1,17 +1,15 @@
-#![allow(unused)] // TODO: remove after development
 use clap::Parser;
 use csv::Writer;
 use env_logger::Builder;
-use log::{debug, error, info};
-use std::io::{self, Write};
-use std::process::Stdio;
+use log::{debug, error};
+use std::io;
 
 use payment_engine::args::Args;
 use payment_engine::ledger::Ledger;
 use payment_engine::transaction;
 use payment_engine::transaction::Transaction;
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     let mut builder = Builder::new();
@@ -47,11 +45,12 @@ fn main() {
 
     // since we processed everything given to us, output the client list
     let mut wtr = Writer::from_writer(io::stdout());
-    ledger.dump_client_csv(&mut wtr);
+    ledger.dump_client_csv(&mut wtr)?;
 
     // if they asked for the internal state to be written, then log it.
     if let Some(ref statelog) = args.statelog {
-        ledger.dump_ledger(&args.statelog.unwrap());
+        ledger.dump_ledger(statelog)?;
     }
-    debug!("Processing complete")
+    debug!("Processing complete");
+    Ok(())
 }
