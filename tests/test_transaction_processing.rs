@@ -11,6 +11,7 @@ use payment_engine::{
 };
 use rust_decimal::Decimal;
 use std::error::Error;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 // Helper function to create a transaction
 fn create_transaction(
@@ -26,6 +27,42 @@ fn create_transaction(
         tx_id,
         amount: Decimal::from_str_exact(amount).unwrap(),
     }
+}
+
+static CURRENT_TXID: AtomicU32 = AtomicU32::new(0);
+
+fn create_deposit(ledger: &mut Ledger,client_id:u16, amount:&str) -> u32 {
+    let tx_id = CURRENT_TXID.fetch_add(1, Ordering::Relaxed);
+    let trans = create_transaction(TransactionType::Deposit,
+                                   client_id, tx_id, amount);
+    ledger.process_transaction(&trans);
+    trans.tx_id
+}
+
+fn create_withdrawl(ledger: &mut Ledger,client_id:u16, amount:&str) -> u32 {
+    let tx_id = CURRENT_TXID.fetch_add(1, Ordering::Relaxed);
+    let trans = create_transaction(TransactionType::Withdrawl,
+                                   client_id, tx_id, amount);
+    ledger.process_transaction(&trans);
+    trans.tx_id
+}
+
+fn create_dispute(ledger: &mut Ledger,tx_id:u32, client_id:u16, amount:&str) {
+    let trans = create_transaction(TransactionType::Dispute,
+                                   client_id, tx_id, amount);
+    ledger.process_transaction(&trans);
+}
+
+fn create_resolve(ledger: &mut Ledger,tx_id:u32, client_id:u16, amount:&str) {
+    let trans = create_transaction(TransactionType::Resolve,
+                                   client_id, tx_id, amount);
+    ledger.process_transaction(&trans);
+}
+
+fn create_chargeback(ledger: &mut Ledger,tx_id:u32, client_id:u16, amount:&str) {
+    let trans = create_transaction(TransactionType::Chargeback,
+                                   client_id, tx_id, amount);
+    ledger.process_transaction(&trans);
 }
 
 #[test]
@@ -167,6 +204,11 @@ fn test_one_deposit_one_withdrawl_one_dispute_one_client() -> Result<(), Box<dyn
     // The current implementation of process_dispute checks this.
     let tx3 = create_transaction(TransactionType::Dispute, 1, 2, "100.00");
     ledger.process_transaction(&tx3)?;
+
+    // the transaction in the by_transaction_id should be a Dispute
+    // after processing the transaction. 
+    let old_transaction = ledger.by_transaction_id.get(&tx3.tx_id).unwrap();
+    assert_eq!(old_transaction.tx_type, TransactionType::Dispute);
 
     // Check to see if client 1 has (available=0, held = 100, locked=false)
     // After withdrawal: available = 100.00

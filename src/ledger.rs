@@ -171,8 +171,12 @@ impl Ledger {
                         "Old amount in transaction: {} was: {}, not equal to disputed amount {}",
                         transaction.tx_id, old_transaction.amount, transaction.amount
                     )
-                    .into());
+                               .into());
                 } else {
+                    if ( old_transaction.tx_type != TransactionType::Dispute ) {
+                        return Err(format!(
+                            "Old amount in transaction: {} isn't in dispute", transaction.tx_id).into());
+                    }
                     account.held -= transaction.amount;
                     // Note: How does this ever get unlocked?
                     info!("Locking client: {}", transaction.client_id);
