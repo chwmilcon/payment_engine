@@ -1,5 +1,6 @@
 #![allow(unused)] // TODO: remove after development
 
+use core::fmt;
 use csv::{Reader, Trim};
 use log::{debug, error, info};
 use rust_decimal::prelude::*;
@@ -51,6 +52,12 @@ impl Transaction {
     }
 }
 
+impl fmt::Display for Transaction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}: type:{}", self.seq_num, self.amount)
+    }
+}
+
 /// Reads a CSV file from the given filename and processes each row using a provided function.
 ///
 /// This function handles opening the file and creating the CSV reader, then delegates
@@ -94,7 +101,7 @@ where
 /// * Result<TransactionType, Box<dyn Error>>
 pub fn translate_trx_type(trx_type: &str) -> Result<TransactionType, Box<dyn Error>> {
     let result = match trx_type {
-        "withdrawl" => Ok(TransactionType::Withdrawl),
+        "withdrawal" => Ok(TransactionType::Withdrawl),
         "withdraw" => Ok(TransactionType::Withdrawl),
         "deposit" => Ok(TransactionType::Deposit),
         "dispute" => Ok(TransactionType::Dispute),
