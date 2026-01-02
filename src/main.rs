@@ -6,13 +6,10 @@ use log::{debug, error, info};
 use std::io::{self, Write};
 use std::process::Stdio;
 
-mod account;
-mod args;
-mod ledger;
-mod transaction;
-use crate::args::Args;
-use crate::ledger::Ledger;
-use crate::transaction::Transaction;
+use payment_engine::args::Args;
+use payment_engine::ledger::Ledger;
+use payment_engine::transaction;
+use payment_engine::transaction::Transaction;
 
 fn main() {
     let args = Args::parse();
@@ -51,5 +48,10 @@ fn main() {
     // since we processed everything given to us, output the client list
     let mut wtr = Writer::from_writer(io::stdout());
     ledger.dump_client_csv(&mut wtr);
+
+    // if they asked for the internal state to be written, then log it.
+    if let Some(ref statelog) = args.statelog {
+        ledger.dump_ledger(&args.statelog.unwrap());
+    }
     debug!("Processing complete")
 }

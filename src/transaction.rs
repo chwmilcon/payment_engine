@@ -166,7 +166,7 @@ where
             Ok(result) => {
                 let row_result = process_row(result, cnt);
                 let result = match row_result {
-                    Ok(row) => process_func(row),
+                    Ok(row) =>  process_func(row),
                     Err(e) => Err(format!("{}: line:{}", e, cnt).into()),
                 };
                 result

@@ -120,10 +120,6 @@ impl Ledger {
         if !self.is_existing_client(transaction.client_id) {
             self.add_client(transaction.client_id);
         }
-        // check to see if we've seen this transaction already
-        if self.is_existing_transaction(transaction.tx_id) {
-            return Err(format!("Transaction {} already seen", transaction.tx_id).into());
-        }
         info!("Processing transaction: {}", transaction.tx_id);
         // Now process the actual transaction
         let result = match transaction.tx_type {
@@ -133,6 +129,10 @@ impl Ledger {
             TransactionType::Resolve => self.process_resolve(transaction),
             TransactionType::Withdrawl => self.process_withdrawl(transaction),
         };
+        // if we successfully processed this transaction, save it for later.
+        if result.is_ok() {
+            self.by_transaction_id.insert(transaction.tx_id, transaction.clone());
+        }
         result
     }
     ///
@@ -154,6 +154,7 @@ impl Ledger {
     // frozen.
     //
     fn process_chargeback(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
+        // TODO: only do this if the transaction is under dispute.
         info!(
             "Processing charge back for client: {} Tx_ID:{} Amt:{}",
             transaction.client_id, transaction.tx_id, transaction.amount
@@ -165,7 +166,7 @@ impl Ledger {
             let old_transaction = self.by_transaction_id.get(&transaction.tx_id);
             if let Some(old_transaction) = old_transaction {
                 // TODO: Do I need to check to see if the new amount == old amount?
-                if old_transaction.amount == transaction.amount {
+                if old_transaction.amount != transaction.amount {
                     return Err(format!(
                         "Old amount in transaction: {} was: {}, not equal to disputed amount {}",
                         transaction.tx_id, old_transaction.amount, transaction.amount
@@ -200,7 +201,10 @@ impl Ledger {
             "Processing deposit for client: {} Tx_ID:{} Amt:{}",
             transaction.client_id, transaction.tx_id, transaction.amount
         );
-
+        // check to see if we've seen this transaction already
+        if self.is_existing_transaction(transaction.tx_id) {
+            return Err(format!("Transaction {} already seen", transaction.tx_id).into());
+        }
         // Get the user account, it should be since we checked earlier.
         let account = self.by_client_id.get_mut(&transaction.client_id);
         if let Some(account) = account {
@@ -233,7 +237,7 @@ impl Ledger {
             let old_transaction = self.by_transaction_id.get(&transaction.tx_id);
             if let Some(old_transaction) = old_transaction {
                 // TODO: Do I need to check to see if the new amount == old amount?
-                if old_transaction.amount == transaction.amount {
+                if old_transaction.amount != transaction.amount {
                     return Err(format!(
                         "Old amount in transaction: {} was: {}, not equal to disputed amount {}",
                         transaction.tx_id, old_transaction.amount, transaction.amount
@@ -279,7 +283,7 @@ impl Ledger {
             let old_transaction = self.by_transaction_id.get(&transaction.tx_id);
             if let Some(old_transaction) = old_transaction {
                 // TODO: Do I need to check to see if the new amount == old amount?
-                if old_transaction.amount == transaction.amount {
+                if old_transaction.amount != transaction.amount {
                     return Err(format!(
                         "Old amount in transaction: {} was: {}, not equal to disputed amount {}",
                         transaction.tx_id, old_transaction.amount, transaction.amount
@@ -313,7 +317,10 @@ impl Ledger {
             "Processing withdrawl for client: {} Tx_ID:{} Amt:{}",
             transaction.client_id, transaction.tx_id, transaction.amount
         );
-
+        // check to see if we've seen this transaction already
+        if self.is_existing_transaction(transaction.tx_id) {
+            return Err(format!("Transaction {} already seen", transaction.tx_id).into());
+        }
         // Get the user account, it should be since we checked earlier.
         let account = self.by_client_id.get_mut(&transaction.client_id);
         if let Some(account) = account {

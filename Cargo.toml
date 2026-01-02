@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Carl Williams <chw@milcon.com>"]
 edition = "2021"
 description = "Simple toy payments engine"
+
 [dependencies]
 "log" = "0.4.14"
 "env_logger" = "0.11.3"
