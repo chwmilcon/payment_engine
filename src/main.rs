@@ -17,12 +17,21 @@ use crate::transaction::Transaction;
 fn main() {
     let args = Args::parse();
 
+    let mut builder = Builder::new();
+
     // Set up the logger at the debug level if the debug flag is present
     if args.debug {
-        Builder::new().filter_level(log::LevelFilter::Debug).init();
+        builder.filter_level(log::LevelFilter::Debug);
     } else {
-        Builder::new().filter_level(log::LevelFilter::Info).init();
+        builder.filter_level(log::LevelFilter::Info);
     }
+
+    if let Some(ref logfile) = args.logfile {
+        let target = Box::new(std::fs::File::create(logfile).expect("Can't create log file"));
+        builder.target(env_logger::Target::Pipe(target));
+    }
+
+    builder.init();
 
     debug!("processing");
 

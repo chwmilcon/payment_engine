@@ -161,13 +161,13 @@ where
 {
     let mut cnt: u32 = 0;
     for result in rdr.records() {
-        cnt + 1;
+        cnt += 1;
         let row_result = match result {
             Ok(result) => {
                 let row_result = process_row(result, cnt);
                 let result = match row_result {
                     Ok(row) => process_func(row),
-                    Err(e) => Err(e),
+                    Err(e) => Err(format!("{}: line:{}", e, cnt).into()),
                 };
                 result
             }

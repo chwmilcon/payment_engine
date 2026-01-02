@@ -10,6 +10,7 @@ use std::{
 use crate::account::{AccountStatus, AccountStatusTotal};
 use crate::transaction::{Transaction, TransactionType};
 use csv::Writer;
+use log::info;
 use serde::Serialize;
 use std::error::Error;
 use std::fs::File;
@@ -123,7 +124,7 @@ impl Ledger {
         if self.is_existing_transaction(transaction.tx_id) {
             return Err(format!("Transaction {} already seen", transaction.tx_id).into());
         }
-
+        info!("Processing transaction: {}", transaction.tx_id);
         // Now process the actual transaction
         let result = match transaction.tx_type {
             TransactionType::Chargeback => self.process_chargeback(transaction),
@@ -138,6 +139,7 @@ impl Ledger {
     /// add a client_id to the ledger, meaning we add an Account Status for this client.
     ///
     fn add_client(&mut self, client_id: u16) {
+        info!("Adding client: {}", client_id);
         let client_account = AccountStatus::new(client_id);
         self.by_client_id.insert(client_id, client_account);
     }
@@ -152,6 +154,10 @@ impl Ledger {
     // frozen.
     //
     fn process_chargeback(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
+        info!(
+            "Processing charge back for client: {} Tx_ID:{} Amt:{}",
+            transaction.client_id, transaction.tx_id, transaction.amount
+        );
         // Get the user account, it should be since we checked earlier.
         let account = self.by_client_id.get_mut(&transaction.client_id);
         if let Some(account) = account {
@@ -166,11 +172,9 @@ impl Ledger {
                     )
                     .into());
                 } else {
-                    // TODO: See if I'm dealing with amount, total and fields correctly.
-                    // TODO: I don't think I need to deal with total since I've already done this.
-                    //                    account.total += transaction.amount;
                     account.held -= transaction.amount;
                     // Note: How does this ever get unlocked?
+                    info!("Locking client: {}", transaction.client_id);
                     account.locked = true;
                 }
             } else {
@@ -192,6 +196,11 @@ impl Ledger {
     // should increase the available and total funds of the client account
     //
     fn process_deposit(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
+        info!(
+            "Processing deposit for client: {} Tx_ID:{} Amt:{}",
+            transaction.client_id, transaction.tx_id, transaction.amount
+        );
+
         // Get the user account, it should be since we checked earlier.
         let account = self.by_client_id.get_mut(&transaction.client_id);
         if let Some(account) = account {
@@ -212,6 +221,11 @@ impl Ledger {
     // while their total funds should remain the same.
     //
     fn process_dispute(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
+        info!(
+            "Processing dispute for client: {} Tx_ID:{} Amt:{}",
+            transaction.client_id, transaction.tx_id, transaction.amount
+        );
+
         // Get the user account, it should be since we checked earlier.
         let account = self.by_client_id.get_mut(&transaction.client_id);
         if let Some(account) = account {
@@ -253,6 +267,11 @@ impl Ledger {
     // disputed, and their total funds should remain the same.
     //
     fn process_resolve(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
+        info!(
+            "Processing resolve for client: {} Tx_ID:{} Amt:{}",
+            transaction.client_id, transaction.tx_id, transaction.amount
+        );
+
         // Get the user account, it should be since we checked earlier.
         let account = self.by_client_id.get_mut(&transaction.client_id);
         if let Some(account) = account {
@@ -267,7 +286,6 @@ impl Ledger {
                     )
                     .into());
                 } else {
-                    // TODO: See if I'm dealing with amount, total and fields correctly.
                     account.available += transaction.amount;
                     account.held -= transaction.amount;
                 }
@@ -291,6 +309,11 @@ impl Ledger {
     // account.
     //
     fn process_withdrawl(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
+        info!(
+            "Processing withdrawl for client: {} Tx_ID:{} Amt:{}",
+            transaction.client_id, transaction.tx_id, transaction.amount
+        );
+
         // Get the user account, it should be since we checked earlier.
         let account = self.by_client_id.get_mut(&transaction.client_id);
         if let Some(account) = account {
