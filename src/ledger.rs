@@ -154,7 +154,6 @@ impl Ledger {
     // frozen.
     //
     fn process_chargeback(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
-        // TODO: only do this if the transaction is under dispute.
         info!(
             "Processing charge back for client: {} Tx_ID:{} Amt:{}",
             transaction.client_id, transaction.tx_id, transaction.amount
@@ -165,7 +164,7 @@ impl Ledger {
             // Look for old transaction
             let old_transaction = self.by_transaction_id.get(&transaction.tx_id);
             if let Some(old_transaction) = old_transaction {
-                // TODO: Do I need to check to see if the new amount == old amount?
+                // Note: Do I need to check to see if the new amount == old amount?
                 if old_transaction.amount != transaction.amount {
                     return Err(format!(
                         "Old amount in transaction: {} was: {}, not equal to disputed amount {}",
@@ -240,7 +239,7 @@ impl Ledger {
             // Look for old transaction
             let old_transaction = self.by_transaction_id.get(&transaction.tx_id);
             if let Some(old_transaction) = old_transaction {
-                // TODO: Do I need to check to see if the new amount == old amount?
+                // Note: Do I need to check to see if the new amount == old amount?
                 if old_transaction.amount != transaction.amount {
                     return Err(format!(
                         "Old amount in transaction: {} was: {}, not equal to disputed amount {}",
@@ -248,7 +247,6 @@ impl Ledger {
                     )
                     .into());
                 } else {
-                    // TODO: See if I'm dealing with amount, total and fields correctly.
                     account.available -= transaction.amount;
                     account.held += transaction.amount;
                 }
@@ -286,7 +284,7 @@ impl Ledger {
             // Look for old transaction
             let old_transaction = self.by_transaction_id.get(&transaction.tx_id);
             if let Some(old_transaction) = old_transaction {
-                // TODO: Do I need to check to see if the new amount == old amount?
+                // Note: Do I need to check to see if the new amount == old amount?
                 if old_transaction.amount != transaction.amount {
                     return Err(format!(
                         "Old amount in transaction: {} was: {}, not equal to disputed amount {}",

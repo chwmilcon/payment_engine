@@ -404,7 +404,6 @@ mod tests {
 
     #[test]
     fn test_process_csv_from_buffer_success() -> Result<(), Box<dyn Error>> {
-        // TODO: Is this redundant with another test?
         let csv_content =
             "type, client, tx, amount\ndeposit,101,1000001,123.4567\nwithdraw,202,1000002,78.90";
 
@@ -428,37 +427,6 @@ mod tests {
             processed_transactions[1].amount,
             rust_decimal::Decimal::from_str("78.90")?
         );
-
-        Ok(())
-    }
-
-    #[test]
-    // TODO: Remove, just for debugging
-    fn foo_dump_transaction() -> Result<(), Box<dyn Error>> {
-        let transaction = Transaction {
-            seq_num: 1,
-            tx_type: TransactionType::Deposit,
-            client_id: 1,
-            tx_id: 1,
-            amount: rust_decimal::Decimal::from_str("100.00")?,
-        };
-
-        //let mut temp_file = NamedTempFile::new()?;
-        let mut temp_file = File::create("output.json")?;
-
-        transaction.output(&mut temp_file)?;
-
-        //         let mut buffer = String::new();
-        //         temp_file.as_file_mut().read_to_string(&mut buffer)?;
-
-        //         let expected_output = r#"{
-        //   "seq_num": 1,
-        //   "tx_type": "Deposit",
-        //   "client_id": 1,
-        //   "tx_id": 1,
-        //   "amount": 100.00
-        // }"#;
-        //         assert_eq!(buffer.trim(), expected_output.trim());
 
         Ok(())
     }

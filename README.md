@@ -25,8 +25,4 @@
 ## TODOs
 - [ ] Clean up TODOs before uploading to github
 - [ ] Make transaction history
-- [ ] Make account struct
-- [X] Allow transaction processing after failed line
-- [ ] Create basic processing loop
-- [ ] Dump the accounts as CSV.
 - [ ] Test cases for keep_going = true

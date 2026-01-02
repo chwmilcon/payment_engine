@@ -1,5 +1,6 @@
-#![allow(dead_code)] // CHW: Remove after development
-#![allow(unused)] use rust_decimal::Decimal;
+#![allow(dead_code)] // TODO: Remove after development
+#![allow(unused)]
+use rust_decimal::Decimal;
 use serde::Serialize;
 
 //
