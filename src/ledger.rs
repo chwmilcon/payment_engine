@@ -1,10 +1,14 @@
 #![allow(unused)]
-use std::{collections::{
-    HashMap, hash_map::Entry::{Occupied, Vacant}
-}, io};
+use std::{
+    collections::{
+        hash_map::Entry::{Occupied, Vacant},
+        HashMap,
+    },
+    io,
+};
 
-use crate::{account::AccountStatus, transaction::TransactionType};
-use crate::transaction::Transaction;
+use crate::account::{AccountStatus, AccountStatusTotal};
+use crate::transaction::{Transaction, TransactionType};
 use csv::Writer;
 use serde::Serialize;
 use std::error::Error;
@@ -84,13 +88,12 @@ impl Ledger {
     ///
     /// # Returns
     ///
-
-    // TODO: Clean up
-    //pub fn dump_client_csv(&self, file: &mut File) -> Result<(), Box<dyn Error>> {
-    pub fn dump_client_csv<W: std::io::Write>(&self, wtr: &mut Writer<W>) -> Result<(), Box<dyn Error>> {
-        //let mut wtr = Writer::from_writer(file);
-        //let mut wtr = Writer::from_writer(io::stdout());
+    pub fn dump_client_csv<W: std::io::Write>(
+        &self,
+        wtr: &mut Writer<W>,
+    ) -> Result<(), Box<dyn Error>> {
         for (_client_id, row) in &self.by_client_id {
+            let row = AccountStatusTotal::new(row);
             wtr.serialize(row)?;
         }
         wtr.flush();
@@ -111,9 +114,9 @@ impl Ledger {
     /// # Returns
     /// `Result<(), Box<dyn Error>>`: Ok(()) if all transactions were processed successfully
     ///
-    pub fn process_transaction(&mut self, transaction : &Transaction) -> Result<(), Box<dyn Error>> {
+    pub fn process_transaction(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
         // Check to see if the client exists
-        if ! self.is_existing_client(transaction.client_id) {
+        if !self.is_existing_client(transaction.client_id) {
             self.add_client(transaction.client_id);
         }
         // check to see if we've seen this transaction already
@@ -138,27 +141,167 @@ impl Ledger {
         let client_account = AccountStatus::new(client_id);
         self.by_client_id.insert(client_id, client_account);
     }
-
-    // ////////////////////////////////////////////////////////////////////
-    // TODO
-    // ///////////////////////////////////////////////////////////////////
-    fn process_chargeback(&self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
+    //
+    // Chargeback
+    //
+    // A chargeback is the final state of a dispute and represents the client
+    // reversing a transaction. Funds that were held have now been
+    // withdrawn. This means that the clients held funds and total
+    // funds should decrease by the amount previously disputed. If a
+    // chargeback occurs the client's account should be immediately
+    // frozen.
+    //
+    fn process_chargeback(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
+        // Get the user account, it should be since we checked earlier.
+        let account = self.by_client_id.get_mut(&transaction.client_id);
+        if let Some(account) = account {
+            // Look for old transaction
+            let old_transaction = self.by_transaction_id.get(&transaction.tx_id);
+            if let Some(old_transaction) = old_transaction {
+                // TODO: Do I need to check to see if the new amount == old amount?
+                if old_transaction.amount == transaction.amount {
+                    return Err(format!(
+                        "Old amount in transaction: {} was: {}, not equal to disputed amount {}",
+                        transaction.tx_id, old_transaction.amount, transaction.amount
+                    )
+                    .into());
+                } else {
+                    // TODO: See if I'm dealing with amount, total and fields correctly.
+                    // TODO: I don't think I need to deal with total since I've already done this.
+                    //                    account.total += transaction.amount;
+                    account.held -= transaction.amount;
+                    // Note: How does this ever get unlocked?
+                    account.locked = true;
+                }
+            } else {
+                return Err(format!(
+                    "Charge back transaction {} not found in ledger",
+                    transaction.tx_id
+                )
+                .into());
+            }
+        } else {
+            return Err(format!("Client {} not found in ledger", transaction.client_id).into());
+        }
         Ok(())
     }
-
-    fn process_deposit(&self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
+    //
+    // Deposit
+    //
+    // A deposit is a credit to the client's asset account, meaning it
+    // should increase the available and total funds of the client account
+    //
+    fn process_deposit(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
+        // Get the user account, it should be since we checked earlier.
+        let account = self.by_client_id.get_mut(&transaction.client_id);
+        if let Some(account) = account {
+            account.available += transaction.amount;
+        } else {
+            return Err(format!("Client {} not found in ledger", transaction.client_id).into());
+        }
         Ok(())
     }
-
-    fn process_dispute(&self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
+    //
+    // Dispute
+    //
+    // A dispute represents a client's claim that a transaction was
+    // erroneous and should be reversed. The transaction shouldn't be
+    // reversed yet but the associated funds should be held. This means
+    // that the clients available funds should decrease by the amount
+    // disputed, their held funds should increase by the amount disputed,
+    // while their total funds should remain the same.
+    //
+    fn process_dispute(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
+        // Get the user account, it should be since we checked earlier.
+        let account = self.by_client_id.get_mut(&transaction.client_id);
+        if let Some(account) = account {
+            // Look for old transaction
+            let old_transaction = self.by_transaction_id.get(&transaction.tx_id);
+            if let Some(old_transaction) = old_transaction {
+                // TODO: Do I need to check to see if the new amount == old amount?
+                if old_transaction.amount == transaction.amount {
+                    return Err(format!(
+                        "Old amount in transaction: {} was: {}, not equal to disputed amount {}",
+                        transaction.tx_id, old_transaction.amount, transaction.amount
+                    )
+                    .into());
+                } else {
+                    // TODO: See if I'm dealing with amount, total and fields correctly.
+                    account.available -= transaction.amount;
+                    account.held += transaction.amount;
+                }
+            } else {
+                return Err(format!(
+                    "Disputed transaction {} not found in ledger",
+                    transaction.tx_id
+                )
+                .into());
+            }
+        } else {
+            return Err(format!("Client {} not found in ledger", transaction.client_id).into());
+        }
         Ok(())
     }
-
-    fn process_resolve(&self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
+    //
+    // Resolve
+    //
+    // A resolve represents a resolution to a dispute, releasing the
+    // associated held funds. Funds that were previously disputed are
+    // no longer disputed. This means that the clients held funds
+    // should decrease by the amount no longer disputed, their
+    // available funds should increase by the amount no longer
+    // disputed, and their total funds should remain the same.
+    //
+    fn process_resolve(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
+        // Get the user account, it should be since we checked earlier.
+        let account = self.by_client_id.get_mut(&transaction.client_id);
+        if let Some(account) = account {
+            // Look for old transaction
+            let old_transaction = self.by_transaction_id.get(&transaction.tx_id);
+            if let Some(old_transaction) = old_transaction {
+                // TODO: Do I need to check to see if the new amount == old amount?
+                if old_transaction.amount == transaction.amount {
+                    return Err(format!(
+                        "Old amount in transaction: {} was: {}, not equal to disputed amount {}",
+                        transaction.tx_id, old_transaction.amount, transaction.amount
+                    )
+                    .into());
+                } else {
+                    // TODO: See if I'm dealing with amount, total and fields correctly.
+                    account.available += transaction.amount;
+                    account.held -= transaction.amount;
+                }
+            } else {
+                return Err(format!(
+                    "Resolved transaction {} not found in ledger",
+                    transaction.tx_id
+                )
+                .into());
+            }
+        } else {
+            return Err(format!("Client {} not found in ledger", transaction.client_id).into());
+        }
         Ok(())
     }
+    //
+    // Withdrawal
+    //
+    // A withdraw is a debit to the client's asset account, meaning it
+    // should decrease the available and total funds of the client
+    // account.
+    //
+    fn process_withdrawl(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
+        // Get the user account, it should be since we checked earlier.
+        let account = self.by_client_id.get_mut(&transaction.client_id);
+        if let Some(account) = account {
+            // TODO: Do I need checks here to make sure it's not locked.
+            if account.available >= transaction.amount {
+                account.available -= transaction.amount;
+            }
+        } else {
+            return Err(format!("Client {} not found in ledger", transaction.client_id).into());
+        }
 
-    fn process_withdrawl(&self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
         Ok(())
     }
 }
