@@ -3,6 +3,8 @@
   main.rs with logger and clap (filename and debug).
 
 ## USAGE:
+
+```
 Usage: payment_engine [OPTIONS] <NAME>
 
 Arguments:
@@ -15,6 +17,7 @@ Options:
       --statelog <STATELOG>  File to dump the internal ledger, all data
   -h, --help                 Print help
   -V, --version              Print version
+```
 
 ## Assumptions
 * Amounts in transactions that are more than 4 digits of precision are
@@ -34,7 +37,7 @@ Options:
   transactions for each transaction type.
 
 * Assuming that code should continue with a single bad row,
-  but --stop-on-error can cause it to stop on error.
+  but `--stop-on-error` can cause it to stop on error.
 
 * In a *real* production system I would assume that gateways would attach to
   end customer. The gateway would take whatever external protocol is being used
@@ -47,12 +50,8 @@ Options:
 
 * This sample is not setup to be multithreaded currently. To maximize the
   hardware it's being run on I would expect it to be.
-  
+
 * I've done most of the testing of the systems with unit tests and
   integration tests (in tests/). There are two example data sets in a
   directory called `sample_data`. I only used to test running with
   file I/O and stdio output.
-
-
-# TODO:
-- [ ] More formatted data tests
