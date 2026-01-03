@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::account::{AccountStatus, AccountStatusTotal};
 use crate::transaction::{Transaction, TransactionType};
 use csv::Writer;
-use log::info;
+use log::debug;
 use serde::Serialize;
 use std::error::Error;
 use std::fs::File;
@@ -112,7 +112,7 @@ impl Ledger {
         if !self.is_existing_client(transaction.client_id) {
             self.add_client(transaction.client_id);
         }
-        info!("Processing transaction: {}", transaction.tx_id);
+        debug!("Processing transaction: {}", transaction.tx_id);
         // Now process the actual transaction
         let result = match transaction.tx_type {
             TransactionType::Chargeback => self.process_chargeback(transaction),
@@ -131,7 +131,7 @@ impl Ledger {
     /// add a client_id to the ledger, meaning we add an Account Status for this client.
     ///
     fn add_client(&mut self, client_id: u16) {
-        info!("Adding client: {}", client_id);
+        debug!("Adding client: {}", client_id);
         let client_account = AccountStatus::new(client_id);
         self.by_client_id.insert(client_id, client_account);
     }
@@ -146,7 +146,7 @@ impl Ledger {
     // frozen.
     //
     fn process_chargeback(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
-        info!(
+        debug!(
             "Processing charge back for client: {} Tx_ID:{} Amt:{}",
             transaction.client_id, transaction.tx_id, transaction.amount
         );
@@ -170,7 +170,7 @@ impl Ledger {
                     }
                     account.held -= transaction.amount;
                     // Note: How does this ever get unlocked?
-                    info!("Locking client: {}", transaction.client_id);
+                    debug!("Locking client: {}", transaction.client_id);
                     account.locked = true;
                 }
             } else {
@@ -192,7 +192,7 @@ impl Ledger {
     // should increase the available and total funds of the client account
     //
     fn process_deposit(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
-        info!(
+        debug!(
             "Processing deposit for client: {} Tx_ID:{} Amt:{}",
             transaction.client_id, transaction.tx_id, transaction.amount
         );
@@ -220,7 +220,7 @@ impl Ledger {
     // while their total funds should remain the same.
     //
     fn process_dispute(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
-        info!(
+        debug!(
             "Processing dispute for client: {} Tx_ID:{} Amt:{}",
             transaction.client_id, transaction.tx_id, transaction.amount
         );
@@ -265,7 +265,7 @@ impl Ledger {
     // disputed, and their total funds should remain the same.
     //
     fn process_resolve(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
-        info!(
+        debug!(
             "Processing resolve for client: {} Tx_ID:{} Amt:{}",
             transaction.client_id, transaction.tx_id, transaction.amount
         );
@@ -307,7 +307,7 @@ impl Ledger {
     // account.
     //
     fn process_withdrawl(&mut self, transaction: &Transaction) -> Result<(), Box<dyn Error>> {
-        info!(
+        debug!(
             "Processing withdrawl for client: {} Tx_ID:{} Amt:{}",
             transaction.client_id, transaction.tx_id, transaction.amount
         );
